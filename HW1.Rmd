@@ -1,0 +1,56 @@
+---
+title: "HW1"
+author: "Zirui Zhang"
+date: "2023-10-01"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+```
+
+```{r chunk_Q1b}
+k1 = 600
+k2 = 300
+rho_1 = 0.2
+rho_2 = 0.5
+rho_3 = 0.8
+rho = c(rho_1, rho_2, rho_3)
+V_a = c(1, 1, 1)*4/k1
+V_b = c(1, 1, 1)*4*(1-(rho)^2)/k2
+V_c = c(1, 1, 1)
+V_d = c(1, 1, 1)*2*(rho+1)/k2
+b  = cbind(rho, V_a, V_b, V_c, V_d) %>% as.data.frame()
+options(digits = 2)
+print(b)
+```
+
+```{r chunk_Q1c}
+k1 = 600
+k2 = 400
+rho_1 = 0.2
+rho_2 = 0.5
+rho_3 = 0.8
+rho = c(rho_1, rho_2, rho_3)
+V_a = c(1, 1, 1)*4/k1
+V_b = c(1, 1, 1)*4*(1-(rho)^2)/k2
+V_c = c(1, 1, 1)
+V_d = c(1, 1, 1)*2*(rho+1)/k2
+c  = cbind(rho, V_a, V_b, V_c, V_d) %>% as.data.frame()
+options(digits = 2)
+print(c)
+```
+
+```{r chunk_Q2a}
+load("~/Documents/2023Fall/P8157/P8157/Six Cities.RData")
+# outlier, mean, collinearity, comment--howtodealwith
+nrow(topeka)
+length(unique(topeka$id))
+skimr::skim(topeka)
+ggplot(topeka, aes(x = age, y = log.FEV1, group = id, color = id)) + 
+  geom_line() + 
+  scale_x_continuous(breaks = c(5, 10, 15, 20)) +
+  scale_y_continuous(limits = c(-0.25, 1.5))
+```
+
