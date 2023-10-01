@@ -5,7 +5,7 @@ date: "2023-10-01"
 output: html_document
 ---
 
-```{r}
+```{r message=FALSE}
 library(tidyverse)
 library(ggplot2)
 ```
@@ -44,13 +44,27 @@ print(c)
 
 ```{r chunk_Q2a}
 load("~/Documents/2023Fall/P8157/P8157/Six Cities.RData")
-# outlier, mean, collinearity, comment--howtodealwith
+# data summmary
 nrow(topeka)
 length(unique(topeka$id))
+visit = topeka %>% group_by(id) %>%tally()
+summary(visit$n)
 skimr::skim(topeka)
+# outlier
+topeka %>% ggplot(aes(x = log.FEV1)) + geom_boxplot()
+# spaghetti plot
 ggplot(topeka, aes(x = age, y = log.FEV1, group = id, color = id)) + 
   geom_line() + 
   scale_x_continuous(breaks = c(5, 10, 15, 20)) +
   scale_y_continuous(limits = c(-0.25, 1.5))
+# dependence
+pairs(topeka)
+corrplot::corrplot(cor(topeka[]))
 ```
+
+There are 5 variables and 1 outcome in the topeka dataset, which consists of 300 clusters with 1994 measurements. Number of measurements within each cluster ranges from 1 to 12, with mean being 6.6 and median being 7. The mean age of the subjects upon their recruitment was 8.03, while the height was 1.28m. For simplicity, the age and height variables could be standardized when conducting the longitudal analysis. One outlier of the outcome log.FEV1 was observed which should be further investigated. In the correlation plot one can see that the covariates age and height are highly correlated, indicating they might be dependent of each other. 
+
+
+
+
 
