@@ -1,7 +1,10 @@
 ---
 title: "HW1"
-output: html_document
-
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
 ---
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
@@ -11,7 +14,7 @@ library(ggplot2)
 
 ## Question 1
 
-#### Question 1(b)
+### Question 1(b)
 ```{r chunk_Q1b, message=FALSE, warning=FALSE}
 k1 = 600
 k2 = 300
@@ -29,7 +32,7 @@ print(b)
 ```
 For minimum variance, for any $\rho$, I would always choose Crossover study to minimize uncertainty.
 
-#### Question 1(c)
+### Question 1(c)
 ```{r chunk_Q1c, message=FALSE, warning=FALSE}
 k1 = 600
 k2 = 400
@@ -49,7 +52,7 @@ For minimum variance, for any $\rho$, I would always choose Crossover study to m
 
 ## Question 2
 
-#### Question 2(a)
+### Question 2(a)
 ```{r chunk_Q2a, message=FALSE, warning=FALSE}
 load("~/Documents/2023Fall/P8157/P8157/Six Cities.RData")
 # data summmary
@@ -57,7 +60,7 @@ nrow(topeka)
 length(unique(topeka$id))
 visit = topeka %>% group_by(id) %>%tally()
 summary(visit$n)
-skimr::skim(topeka)
+skimr::skim(topeka) %>% tibble::as_tibble()
 # outlier
 topeka %>% ggplot(aes(x = log.FEV1)) + geom_boxplot()
 # spaghetti plot
@@ -72,9 +75,9 @@ corrplot::corrplot(cor(topeka[]))
 
 There are 5 variables and 1 outcome in the topeka dataset, which consists of 300 clusters with 1994 measurements. Number of measurements within each cluster ranges from 1 to 12, with mean being 6.6 and median being 7. The mean age of the subjects upon their recruitment was 8.03, while the height was 1.28m. For simplicity, the age and height variables could be standardized when conducting the longitudal analysis. One outlier of the outcome log.FEV1 was observed which should be further investigated. In the correlation plot one can see that the covariates age and height are highly correlated, indicating they might be dependent of each other. 
 
-#### Question 2(b)
+### Question 2(b)
 
-#### Question 2(c)
+### Question 2(c)
 
 ## Question 3
 
@@ -84,39 +87,51 @@ dmm = macs %>%
   filter(time >= -0.5) %>% 
   group_by(id) %>%
   filter(any(-0.5 <= time & time < 0) && any(time > 0)) %>%
-  mutate(visit = row_number() - 1,
-         idd = group_indices()) %>%
+  mutate(visit = row_number() - 1) %>%
   ungroup() 
-
-length(unique(dmm$id))
 ```
+### Question 3(a)
 
-#### Question 3(a)
-
-```{r}
-sum = skimr::skim(dmm)
+Here's Table 1 summarizing the covariates at baseline:
+```{r message=FALSE, warning=FALSE}
+sum = skimr::skim(dmm) %>% tibble::as_tibble()
 sum
+dmm = dmm %>% 
+  group_by(id) %>%
+  mutate(idd = group_indices()) %>%
+  ungroup() 
 ```
 
-#### Question 3(b)
+### Question 3(b)
 
+Here's the spaghetti plot of the CD4+ cell count progression across time since seroconversion:
 ```{r}
 K = 266
 # spaghetti plot
 ggplot(dmm, aes(x = time, y = cd4, group = id, color = id)) + 
   geom_line()
-
-# Stage 1
-betaMat = data.frame(beta0=rep(NA, K), beta.time=rep(NA, K))
-
-for(k in 1:K) {
-  temp.k = dmm[dmm$idd == k,]
-  fit.k = lm(cd4 ~ time , data = temp.k)
-  betaMat[k, 1:2] = c(fit.k$coef)
-}
-
-# 
-
 ```
 
+#### Stage 1: Coefficients table (first 6 rows) for time (LogNormal model): 
+```{r}
+# Stage 1
+betaMat = data.frame(beta0=rep(NA, K), beta.time=rep(NA, K))
+for(k in 1:K) {
+  temp.k = dmm[dmm$idd == k,]
+  fit.k = lm(log(cd4) ~ time , data = temp.k)
+  betaMat[k, 1:2] = c(fit.k$coef)
+}
+head(betaMat)
+```
 
+#### Stage 2: Explain variance across subject-specific baseline covariates:
+```{r}
+# Stage 2
+dmm_base = dmm %>% 
+  filter(visit == 0)
+dmm_base$beta.time = betaMat$beta.time
+summary(lm(beta.time ~ age + packs + drug + partners + cesd, data=dmm_base))
+# In addition, provide a brief summary of the results using language that would be suitable for a non-biostatistician collaborator.
+```
+
+As time progresses since seroconversion, the CD4+ cell counts of our patients decrease. The decrease rate could be possibly due to the baseline age, packs of cigarettes per day, whether on drug or not, number of partners and cesd depression level of the patients. If our significance level was set higher, say, 0.1, we would find that the more depressed our patients are, the more CD4+ cells he would lose as time progresses. 
