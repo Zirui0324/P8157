@@ -80,20 +80,21 @@ There are 5 variables and 1 outcome in the topeka dataset, which consists of 300
 
 ```{r}
 load("~/Documents/2023Fall/P8157/P8157/MACS.RData")
-data = macs[macs$time>= -0.5, ] %>% 
+dmm = macs %>%
+  filter(time >= -0.5) %>% 
   group_by(id) %>%
   filter(any(-0.5 <= time & time < 0) && any(time > 0)) %>%
   mutate(visit = row_number() - 1,
-         drug = as.factor(drug)) %>%
+         idd = group_indices()) %>%
   ungroup() 
 
-length(unique(data$id))
+length(unique(dmm$id))
 ```
 
 #### Question 3(a)
 
 ```{r}
-sum = skimr::skim(data)
+sum = skimr::skim(dmm)
 sum
 ```
 
@@ -102,17 +103,16 @@ sum
 ```{r}
 K = 266
 # spaghetti plot
-ggplot(data, aes(x = time, y = cd4, group = id, color = id)) + 
+ggplot(dmm, aes(x = time, y = cd4, group = id, color = id)) + 
   geom_line()
 
 # Stage 1
-betaMat = data.frame(beta0=rep(NA, K), beta.time=rep(NA, K), beta.packs=rep(NA, K), 
-                     beta.drug=rep(NA, K), beta.partners=rep(NA, K), beta.cesd=rep(NA, K))
+betaMat = data.frame(beta0=rep(NA, K), beta.time=rep(NA, K))
 
 for(k in 1:K) {
-  temp.k = data[data$id == k,]
-  fit.k = lm(cd4 ~ time + packs + drug + partners + cesd, data = temp.k)
-  betaMat[k, 1:6] = c(fit.k$coef)
+  temp.k = dmm[dmm$idd == k,]
+  fit.k = lm(cd4 ~ time , data = temp.k)
+  betaMat[k, 1:2] = c(fit.k$coef)
 }
 
 # 
