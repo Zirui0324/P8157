@@ -159,5 +159,5 @@ summary(lm(beta.time ~ age + packs + drug + partners + cesd, data=dmm_base))
 # In addition, provide a brief summary of the results using language that would be suitable for a non-biostatistician collaborator.
 ```
 
-As time progresses since seroconversion, the CD4+ cell counts of our patients decrease. The decrease rate could be possibly related to the baseline age; packs of cigarettes per day; whether on drug or not; number of partners and cesd depression level of the patients. If our significance level was set higher, say, 0.1, we would find that the more depressed our patients are, the more CD4+ cells he would lose as time progresses. 
+As time progresses since seroconversion, the CD4+ cell counts of our patients decrease. The decrease rate could be possibly related to the baseline age; packs of cigarettes per day; whether on drug or not; number of partners and cesd depression level of the patients. If our significance level was set higher, say, 0.1, we would find that the more depressed our patients are, the more CD4+ cells he would lose as time progresses. However, there seems to be no significant influence of the other factors on the cell counts.
 
