@@ -10,6 +10,7 @@ output:
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 library(tidyverse)
 library(ggplot2)
+library(patchwork)
 ```
 
 ## Question 1
@@ -56,28 +57,52 @@ For minimum variance, for any $\rho$, I would always choose Crossover study to m
 ```{r chunk_Q2a, message=FALSE, warning=FALSE}
 load("~/Documents/2023Fall/P8157/P8157/Six Cities.RData")
 # data summmary
-nrow(topeka)
-length(unique(topeka$id))
-visit = topeka %>% group_by(id) %>%tally()
-summary(visit$n)
-skimr::skim(topeka) %>% tibble::as_tibble()
+nrow(topeka) # number of total observations
+length(unique(topeka$id)) # number of clusters
+visit = topeka %>% group_by(id) %>%tally() 
+summary(visit$n) # summary of observations in one cluster
+skimr::skim(topeka) %>% tibble::as_tibble() # summary of variables
 # outlier
-topeka %>% ggplot(aes(x = log.FEV1)) + geom_boxplot()
-# spaghetti plot
-ggplot(topeka, aes(x = age, y = log.FEV1, group = id, color = id)) + 
-  geom_line() + 
-  scale_x_continuous(breaks = c(5, 10, 15, 20)) +
-  scale_y_continuous(limits = c(-0.25, 1.5))
+box = topeka %>% ggplot(aes(x = log.FEV1)) + geom_boxplot() 
 # dependence
-pairs(topeka)
-corrplot::corrplot(cor(topeka[]))
+pair = pairs(topeka) 
+cor = corrplot::corrplot(cor(topeka[]))
+# spaghetti plot
+ggplot(topeka, aes(x = height, y = log.FEV1, group = id, color = id)) + 
+  geom_line() +
+  scale_y_continuous(limits = c(-0.25, 1.5)) 
+# exploratory
+g1 = ggplot(topeka, aes(x = height, y = log.FEV1)) + 
+  geom_point() +
+  scale_y_continuous(limits = c(-0.25, 1.5)) 
+g2 = ggplot(topeka, aes(x = height - height.init, y = log.FEV1)) + 
+  geom_point() +
+  scale_y_continuous(limits = c(-0.25, 1.5)) 
+g3 = ggplot(topeka, aes(x = age, y = log.FEV1)) + 
+  geom_point() +
+  scale_y_continuous(limits = c(-0.25, 1.5)) 
+g1 + g2+ g3
 ```
 
 There are 5 variables and 1 outcome in the topeka dataset, which consists of 300 clusters with 1994 measurements. Number of measurements within each cluster ranges from 1 to 12, with mean being 6.6 and median being 7. The mean age of the subjects upon their recruitment was 8.03, while the height was 1.28m. For simplicity, the age and height variables could be standardized when conducting the longitudal analysis. One outlier of the outcome log.FEV1 was observed which should be further investigated. In the correlation plot one can see that the covariates age and height are highly correlated, indicating they might be dependent of each other. 
 
+From the scatterplot we can tell that there exists association between age, height, height change and log.FEV1. log.FEV1 seems to be positive related to all the three variables. 
+
+
+
 ### Question 2(b)
 
+If we take log.FEV1 as the outcome, we can test if the increase in log.FEV1 is associated with the increase in height. As we can see from the scatterplot that larger increase in height might indicate higher log.FEV1.
+
 ### Question 2(c)
+```{r message=FALSE, warning=FALSE}
+ggplot(topeka, aes(x = scale(height.init), y = log.FEV1)) + 
+  geom_point() +
+  scale_y_continuous(limits = c(-0.25, 1.5)) 
+```
+
+Using cross-sectional data at baseline, we could explore the relationship between initial height and log.FEV1. Assumptions could be made from the scatterplot that those with higher initial height are unlikely to have relative low log.FEV1. 
+
 
 ## Question 3
 
@@ -134,4 +159,5 @@ summary(lm(beta.time ~ age + packs + drug + partners + cesd, data=dmm_base))
 # In addition, provide a brief summary of the results using language that would be suitable for a non-biostatistician collaborator.
 ```
 
-As time progresses since seroconversion, the CD4+ cell counts of our patients decrease. The decrease rate could be possibly due to the baseline age, packs of cigarettes per day, whether on drug or not, number of partners and cesd depression level of the patients. If our significance level was set higher, say, 0.1, we would find that the more depressed our patients are, the more CD4+ cells he would lose as time progresses. 
+As time progresses since seroconversion, the CD4+ cell counts of our patients decrease. The decrease rate could be possibly related to the baseline age; packs of cigarettes per day; whether on drug or not; number of partners and cesd depression level of the patients. If our significance level was set higher, say, 0.1, we would find that the more depressed our patients are, the more CD4+ cells he would lose as time progresses. 
+
