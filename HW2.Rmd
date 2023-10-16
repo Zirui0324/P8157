@@ -1,0 +1,45 @@
+---
+title: "HW2"
+output: pdf_document
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+```
+
+## Question 1
+
+### Question 1(a)
+```{r}
+load("~/Documents/2023Fall/P8157/P8157/MACS-VL.RData")
+data = macsVL
+# number of clusters
+length(unique(data$id))
+# number of measurements within each cluster
+obs = data |> group_by(id) |> summarize(n_obs = n())
+summary(obs$n_obs)
+# follow-up period
+fl = data |> group_by(id) |> mutate(max_mon = max(month)) |> 
+  filter(month == max_mon)
+summary(fl$max_mon)
+# time interval between measurements within each cluster
+int = data |> 
+  group_by(id) |> 
+  mutate(delta_mon = month - lag(month))
+mean_int = mean(int$delta_mon, na.rm = TRUE)
+median_int = median(int$delta_mon, na.rm = TRUE)
+# baseline vload
+vl = data |> group_by(id) |> summarize(vload = first(vload))
+summary(vl$vload)
+# cd4+ count
+c4 = data |> group_by(id) |> summarize(base_cd4 = first(cd4), last_cd4 = last(cd4)) |> 
+  mutate(loss_cd4 = base_cd4 - last_cd4)
+summary(c4$loss_cd4)
+# spaghetti plot
+ggplot(data, aes(x = month, y = cd4, group = id, color = id)) + 
+  geom_line() 
+```
+
+
