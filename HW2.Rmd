@@ -12,9 +12,17 @@ library(patchwork)
 ## Question 1
 
 ### Question 1(a)
-```{r}
+```{r chunk_data import warning=FALSE}
 load("~/Documents/2023Fall/P8157/P8157/MACS-VL.RData")
 data = macsVL
+macs = data |> 
+  group_by(id)  |> 
+  mutate(idd = group_indices())  |> 
+  ungroup() 
+```
+
+
+```{r chunk_variable sum}
 # number of clusters
 length(unique(data$id))
 # number of measurements within each cluster
@@ -28,8 +36,7 @@ summary(fl$max_mon)
 int = data |> 
   group_by(id) |> 
   mutate(delta_mon = month - lag(month))
-mean_int = mean(int$delta_mon, na.rm = TRUE)
-median_int = median(int$delta_mon, na.rm = TRUE)
+summary(int$delta_mon)
 # baseline vload
 vl = data |> group_by(id) |> summarize(vload = first(vload))
 summary(vl$vload)
@@ -41,5 +48,46 @@ summary(c4$loss_cd4)
 ggplot(data, aes(x = month, y = cd4, group = id, color = id)) + 
   geom_line() 
 ```
+```{r chunk_2 stage model}
+K = 225
+# Stage 1
+betaMat = data.frame(beta0=rep(NA, K), beta.time=rep(NA, K))
+for(k in 1:K) {
+  temp.k = macs[macs$idd == k,]
+  fit.k = lm(log(cd4) ~ month, data = temp.k)
+  betaMat[k, 1:2] = c(fit.k$coef)
+}
+head(betaMat)
+
+ggplot(data_2, aes(x = vload, y = beta.time, color = id)) + 
+  geom_line() 
+
+# Stage 2
+data_2 = cbind(vl, betaMat)
+model_time = lm(beta.time ~ vload, data = data_2)
+summary(model_time)
+```
 
 
+### Question 1(b)
+```{r}
+data_1 = data |> 
+  mutate(halfyr = round(month/6))
+fitf = lm(cd4 ~ halfyr, data = data_1) 
+resMat = matrix(residuals(fitf), ncol=9, byrow=TRUE) 
+# covariance matrix diagonal
+sd = round(sqrt(diag(cov(resMat))), 2)
+sd = c(266.63, 323.47, 312.31, 299.70, 272.13, 315.27, 286.79, 274.45, 332.57)
+# correlation
+comat = round(cor(resMat), 2)
+# sd and corr matrix:
+diag(comat) = sd
+comat
+```
+
+
+
+### Question 1(c)
+
+
+### Question 1(d)
