@@ -41,6 +41,10 @@ summary(int$delta_mon)
 # baseline vload
 vl = data |> group_by(id) |> summarize(vload = first(vload))
 summary(vl$vload)
+ggplot(vl, aes(x = vload)) + 
+  geom_histogram()
+ggplot(vl, aes(x = log(vload))) + 
+  geom_histogram()
 # cd4+ count
 c4 = data |> group_by(id) |> summarize(base_cd4 = first(cd4), last_cd4 = last(cd4)) |> 
   mutate(loss_cd4 = base_cd4 - last_cd4)
@@ -49,6 +53,7 @@ summary(c4$loss_cd4)
 ggplot(data, aes(x = month, y = cd4, group = id, color = id)) + 
   geom_line() 
 ```
+
 ```{r chunk_2 stage model}
 K = 225
 # Stage 1
@@ -82,33 +87,99 @@ comat = round(cor(resMat), 2)
 diag(comat) = sd
 comat
 ```
-I mutate the month variable into a half-year variable and explored the covariance structure of the data. There isn't evident trend whether the variances change with time, but the correlation does seem to be decaying as a function of time between observations. Thus the auto-regressive correlation structure seems most appropriate here. 
+The month variable was mutated into a half-year variable and then I explored the covariance structure of the data. There isn't evident trend whether the variances change with time, but the correlation does seem to be decaying as a function of time between observations. Thus the auto-regressive correlation structure seems most appropriate here. 
+
 
 
 ### Question 1(c)
 ```{r}
 data0 = data |> 
-  mutate(vload = scale(vload))
+  mutate(vload = log(vload))
 fit1 = gls(cd4 ~ month*vload, method = "ML", data = data0, corr = corCompSymm(form = ~ 1 | id))
 summary(fit1)
 fit2 = gls(cd4 ~ month*vload, method = "REML", data = data0, corr = corCompSymm(form = ~ 1 | id))
 summary(fit2)
 ```
-
+Both ML and REML give significant estimations of the effect of both baseline virus load on CD4+ cell count and the influence of baseline virus load on the decline rate of cell count. Generally, keeping baseline virus load fixed, with one unit increase in month, the cell count would decrease by -3.08-0.38log(vload); keeping month fixed, with one unit increase in log(virus load), the cell count would decrease by -35.7-0.38month. The p-value of the interaction term is 0.0286, indicating that under a significance level of 0.05, there is a significant association between baseline viral
+load and the rate of decline in CD4+.
 
 ### Question 1(d)
 ```{r}
-j = 10
-min = min(vl$vload)
-max = max(vl$vload)
-med = median(vl$vload)
-int1 = (med-min)/5
-int2 = (max-med)/5
-breaks = c(0, seq(min+int1, med, by = int1), seq(med+int2, max, by = int2))
-cats = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10")
-dataj = data |> 
+vl = data0$vload
+summary(vl)
+min = min(vl)
+max = max(vl)
+med = median(vl)
+mean = mean(vl)
+q1 = quantile(vl,0.25)
+q3 = quantile(vl,0.75)
+breaks = c(min-1, q1, med, q3, max+1)
+cats = c("1", "2", "3", "4")
+
+dataj = data0 |> 
   mutate(cats = cut(vload, breaks = breaks, labels = cats, right = FALSE))
 
-fit3 = gls(cd4 ~ month, method = "REML", data = dataj, corr = corCompSymm(form = ~ 1 | id))
+fit3 = gls(cd4 ~ month*cats, method = "REML", data = dataj, corr = corCompSymm(form = ~ 1 | id))
 summary(fit3)
 ```
+\begin{table}
+\caption{Model with ML ($\rho$ = 0.5673)}
+\centering
+\begin{tabular}{|l|c|c|c|c|}
+	\hline
+	 & Value & Standard error & t-value & p-value\\
+	\hline
+    Intercept &1108.10 &91.33&12.1336&0.0000\\
+	\hline
+    month	&-3.0861	&1.7605	&-1.7530	&0.0798\\
+	\hline
+    vload	&-35.70	&8.99	&-3.9704 &0.0001\\
+	\hline
+    month:vload	&-0.38	&0.17	&-2.1902	&0.0286\\
+	\hline
+\end{tabular}
+\end{table}
+
+\begin{table}
+\caption{Model with REML ($\rho$ = 0.5693)}
+\centering
+\begin{tabular}{|l|c|c|c|c|}
+	\hline
+	 & Value & Standard error & t-value & p-value\\
+	\hline
+    Intercept &1108.10	&91.56	&12.10	&0.00\\
+	\hline
+    month	&-3.09	&1.76	&-1.7530	&0.0798\\
+	\hline
+    vload	&-35.70	&9.016	&-3.9599	&0.0001\\
+	\hline
+    month:vload	&-0.38	&0.17	&-2.1911	&0.0286\\
+	\hline
+\end{tabular}
+\end{table}
+
+\begin{table}
+\caption{Stratified Model with REML ($\rho$ = 0.5731)}
+\centering
+\begin{tabular}{|l|c|c|c|c|}
+	\hline
+	 & Value & Standard error & t-value & p-value\\
+	\hline
+    Intercept &855.50&33.56&25.4896&0.0000\\
+	\hline
+    month	&-5.50&0.63	&-8.7239	&0.0000\\
+	\hline
+    cats2	&-103.94&46.89	&-2.2165	&0.0268\\
+	\hline
+    cats3	&-122.28&47.61	&-2.5683	&0.0103\\
+	\hline
+    cats4	&-186.24&46.71	&-3.9871	&0.0001\\
+	\hline
+    month:cats2	&-1.95	&0.89	&-2.1949	&0.0283\\
+	\hline
+    month:cats3	&-2.57	&0.89	&-2.8987	&0.0038\\
+	\hline
+    month:cats4	&-1.00	&0.90	&-1.1162	&0.2645\\
+	\hline
+\end{tabular}
+\end{table}
