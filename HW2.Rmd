@@ -7,12 +7,13 @@ output: pdf_document
 library(tidyverse)
 library(ggplot2)
 library(patchwork)
+library(nlme)
 ```
 
 ## Question 1
 
 ### Question 1(a)
-```{r chunk_data import warning=FALSE}
+```{r chunk_data import, warning=FALSE}
 load("~/Documents/2023Fall/P8157/P8157/MACS-VL.RData")
 data = macsVL
 macs = data |> 
@@ -57,37 +58,57 @@ for(k in 1:K) {
   fit.k = lm(log(cd4) ~ month, data = temp.k)
   betaMat[k, 1:2] = c(fit.k$coef)
 }
-head(betaMat)
-
-ggplot(data_2, aes(x = vload, y = beta.time, color = id)) + 
-  geom_line() 
 
 # Stage 2
 data_2 = cbind(vl, betaMat)
 model_time = lm(beta.time ~ vload, data = data_2)
 summary(model_time)
 ```
-
+The modeling result indicates that vload is certainly a significant modifier of the rate of decline of CD4+ cell count.
 
 ### Question 1(b)
-```{r}
+```{r chunk_covariance, warning=FALSE}
 data_1 = data |> 
   mutate(halfyr = round(month/6))
 fitf = lm(cd4 ~ halfyr, data = data_1) 
-resMat = matrix(residuals(fitf), ncol=9, byrow=TRUE) 
+resMat = matrix(residuals(fitf), ncol=8, byrow=TRUE) 
 # covariance matrix diagonal
 sd = round(sqrt(diag(cov(resMat))), 2)
 sd = c(266.63, 323.47, 312.31, 299.70, 272.13, 315.27, 286.79, 274.45, 332.57)
+sd = c(330.30, 264.27, 272.81, 320.29, 338.98, 288.09, 279.74, 292.83)
 # correlation
 comat = round(cor(resMat), 2)
 # sd and corr matrix:
 diag(comat) = sd
 comat
 ```
-
+I mutate the month variable into a half-year variable and explored the covariance structure of the data. There isn't evident trend whether the variances change with time, but the correlation does seem to be decaying as a function of time between observations. Thus the auto-regressive correlation structure seems most appropriate here. 
 
 
 ### Question 1(c)
+```{r}
+data0 = data |> 
+  mutate(vload = scale(vload))
+fit1 = gls(cd4 ~ month*vload, method = "ML", data = data0, corr = corCompSymm(form = ~ 1 | id))
+summary(fit1)
+fit2 = gls(cd4 ~ month*vload, method = "REML", data = data0, corr = corCompSymm(form = ~ 1 | id))
+summary(fit2)
+```
 
 
 ### Question 1(d)
+```{r}
+j = 10
+min = min(vl$vload)
+max = max(vl$vload)
+med = median(vl$vload)
+int1 = (med-min)/5
+int2 = (max-med)/5
+breaks = c(0, seq(min+int1, med, by = int1), seq(med+int2, max, by = int2))
+cats = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10")
+dataj = data |> 
+  mutate(cats = cut(vload, breaks = breaks, labels = cats, right = FALSE))
+
+fit3 = gls(cd4 ~ month, method = "REML", data = dataj, corr = corCompSymm(form = ~ 1 | id))
+summary(fit3)
+```
