@@ -1,6 +1,8 @@
 ---
 title: "HW2"
-output: pdf_document
+output: 
+  pdf_document:
+    number_sections: true
 ---
 
 ```{r message=FALSE, warning=FALSE, include=FALSE}
@@ -10,9 +12,9 @@ library(patchwork)
 library(nlme)
 ```
 
-## Question 1
+# Question 1
 
-### Question 1(a)
+## Question 1(a)
 ```{r chunk_data import, warning=FALSE}
 load("~/Documents/2023Fall/P8157/P8157/MACS-VL.RData")
 data = macsVL
@@ -36,7 +38,8 @@ summary(fl$max_mon)
 # time interval between measurements within each cluster
 int = data |> 
   group_by(id) |> 
-  mutate(delta_mon = month - lag(month))
+  mutate(delta_mon = month - lag(month)) |> 
+  drop_na()
 summary(int$delta_mon)
 # baseline vload
 vl = data |> group_by(id) |> summarize(vload = first(vload))
@@ -55,6 +58,7 @@ ggplot(data, aes(x = month, y = cd4, group = id, color = id)) +
 ```
 
 ```{r chunk_2 stage model}
+# 2-stage analysis
 K = 225
 # Stage 1
 betaMat = data.frame(beta0=rep(NA, K), beta.time=rep(NA, K))
@@ -67,11 +71,12 @@ for(k in 1:K) {
 # Stage 2
 data_2 = cbind(vl, betaMat)
 model_time = lm(beta.time ~ vload, data = data_2)
-summary(model_time)
+summary(model_time)$coefficients
 ```
 The modeling result indicates that vload is certainly a significant modifier of the rate of decline of CD4+ cell count.
 
-### Question 1(b)
+\newpage
+## Question 1(b)
 ```{r chunk_covariance, warning=FALSE}
 data_1 = data |> 
   mutate(halfyr = round(month/6))
@@ -87,26 +92,28 @@ comat = round(cor(resMat), 2)
 diag(comat) = sd
 comat
 ```
-The month variable was mutated into a half-year variable and then I explored the covariance structure of the data. There isn't evident trend whether the variances change with time, but the correlation does seem to be decaying as a function of time between observations. Thus the auto-regressive correlation structure seems most appropriate here. 
+The month variable was mutated into a half-year variable. The covariance structure of the data was explored afterwards. There isn't evident trend whether the variances change with time, but the correlation does seem to be decaying as a function of time between observations. Thus the **auto-regressive** correlation structure seems most appropriate here. 
 
 
 
-### Question 1(c)
+
+\newpage
+## Question 1(c) -- please refer to the last page for model summary tables
 ```{r}
 data0 = data |> 
   mutate(vload = log(vload))
 fit1 = gls(cd4 ~ month*vload, method = "ML", data = data0, corr = corCompSymm(form = ~ 1 | id))
-summary(fit1)
+sum1 = summary(fit1)
 fit2 = gls(cd4 ~ month*vload, method = "REML", data = data0, corr = corCompSymm(form = ~ 1 | id))
-summary(fit2)
+sum2 = summary(fit2)
+sum1$coefficients
+sum2$coefficients
 ```
-Both ML and REML give significant estimations of the effect of both baseline virus load on CD4+ cell count and the influence of baseline virus load on the decline rate of cell count. Generally, keeping baseline virus load fixed, with one unit increase in month, the cell count would decrease by -3.08-0.38log(vload); keeping month fixed, with one unit increase in log(virus load), the cell count would decrease by -35.7-0.38month. The p-value of the interaction term is 0.0286, indicating that under a significance level of 0.05, there is a significant association between baseline viral
-load and the rate of decline in CD4+.
 
-### Question 1(d)
+
+## Question 1(d)
 ```{r}
 vl = data0$vload
-summary(vl)
 min = min(vl)
 max = max(vl)
 med = median(vl)
@@ -120,10 +127,34 @@ dataj = data0 |>
   mutate(cats = cut(vload, breaks = breaks, labels = cats, right = FALSE))
 
 fit3 = gls(cd4 ~ month*cats, method = "REML", data = dataj, corr = corCompSymm(form = ~ 1 | id))
-summary(fit3)
+sum3 = summary(fit3)
+sum3$coefficients
 ```
+\newpage
+**Interpretation**:
+
+* In the non-categorized data, both ML and REML give significant estimations of the effects of both baseline virus load on CD4+ cell count and the influence of baseline virus load on the decline rate of cell count. Generally -- 
+
+  * keeping baseline virus load fixed, with one unit increase in month, the expected cell count would decrease by $-3.08-0.38log(vload)$; 
+  
+  * keeping month fixed, with one unit increase in $log(vload)$, the expected cell count would decrease by $-35.7-0.38*month$. 
+
+The p-value of the interaction term is 0.0286, indicating that under a significance level of 0.05, there is a significant association between baseline viral
+load and the rate of decline in CD4+.
+
+* In the vload-categorized data, we categorize $log(vload)$ into 4 categories according to the three quantiles, so that each category has nearly equal number of corresponding measurements. From the result we can see that:
+
+  * for thoese with baseline virus load within the $1^{st}$ category: expected CD4+ cell count at baseline is 855.5; and with each unit increase in month, the expectation of their cell count would decrease by -5.5;
+  * for thoese with baseline virus load within the $2^{nd}$ category: expected CD4+ cell count at baseline is 751.56; with each unit increase in month, the expectation of their cell count would decrease by -7.45;
+  * for thoese with baseline virus load within the $3^{rd}$ category: expected CD4+ cell count at baseline is 733.22; with each unit increase in month, the expectation of their cell count would decrease by -8.07;
+  * for thoese with baseline virus load within the $4^{th}$ category: expected CD4+ cell count at baseline is 669.26; with each unit increase in month, the expectation of their cell count would decrease by -6.5;
+
+The p-value of all terms except for the month*category4 term is below 0.05, indicating that under a significance level of 0.05, the baseline CD4+ cell count in the four categories differ significantly; while the rate of the decline of CD4+ cell count at least differ significantly in the first 3 categories.
+
+\newpage
+
 \begin{table}
-\caption{Model with ML ($\rho$ = 0.5673)}
+\caption{Non-Categorized Model with ML ($\rho$ = 0.5673)}
 \centering
 \begin{tabular}{|l|c|c|c|c|}
 	\hline
@@ -141,7 +172,7 @@ summary(fit3)
 \end{table}
 
 \begin{table}
-\caption{Model with REML ($\rho$ = 0.5693)}
+\caption{Non-Categorized Model with REML ($\rho$ = 0.5693)}
 \centering
 \begin{tabular}{|l|c|c|c|c|}
 	\hline
@@ -159,7 +190,7 @@ summary(fit3)
 \end{table}
 
 \begin{table}
-\caption{Stratified Model with REML ($\rho$ = 0.5731)}
+\caption{Categorized Model with REML ($\rho$ = 0.5731)}
 \centering
 \begin{tabular}{|l|c|c|c|c|}
 	\hline
@@ -183,3 +214,18 @@ summary(fit3)
 	\hline
 \end{tabular}
 \end{table}
+
+\begin{table}
+\caption{New Coefficients of the Categorized Model with REML}
+\centering
+\begin{tabular}{|l|c|c|c|c|}
+	\hline
+	 Coefficients & j=2 & j=3 & j=4\\
+	\hline
+    $\beta_0+\beta_{2,j}$ &751.56	&733.22	&669.26\\
+	\hline
+    $\beta_1+\beta_{3,j}$	&-7.45	&-8.07	&-6.5\\
+	\hline
+\end{tabular}
+\end{table}
+
