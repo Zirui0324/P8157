@@ -1,0 +1,43 @@
+---
+title: "MID"
+author: "Zirui Zhang"
+date: "2023-10-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+```
+
+```{r}
+load("~/Documents/2023Fall/P8157/P8157/Six Cities.RData")
+data = topeka |>  group_by(id) |> filter(n() >= 5) |> ungroup()
+length(unique(data$id))
+data = data |> 
+  mutate(y = exp(log.FEV1)/(height^2))
+```
+
+## Question (a)
+Produce a figure of the response, Yki as a function of age. On the figure indicate the individual
+trajectories for a random sample of 4 girls.
+```{r}
+set.seed(200324)
+sample = data  |> 
+  filter(id %in% sample(unique(data$id), 4))
+
+ggplot(data, aes(x = age, y = y, group = id, color = id)) + 
+  geom_line() +  
+  geom_line(data = sample, color = "blue") +
+  scale_color_distiller(type = "seq",
+                        direction = -1,
+                        palette = "Greys") +
+  theme_classic()
+
+ggplot(data, aes(x = age, y = y, group = id, color = id)) + 
+  geom_line() +  
+  geom_line(data = sample, color = "green") +
+  theme_classic()
+```
+
