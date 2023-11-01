@@ -132,14 +132,14 @@ knitr::kable(coef, format = "markdown")
 \newpage
 ## Problem (c)
 
-Here's the fitted regression curve for the 4 random samples, where green lines are the true Y's, blue lines are the regression curves for model(3) and brown lines for model(2).
+Here's the fitted regression curve for the 4 random samples, where green lines are the true Y's, blue lines are the regression curves for model(3) and brown lines for model(2). We can see that model(3) generally provide better fit for the real data.
 ```{r}
 p2
 ```
 
 ## Problem (d)
 
-
+In model(3), all children have a shared baseline value for FEV.1 regardless of their age. As age increases, the change in their expected FEV.1 value is assumed to be related to age, its quadratic term as well as its cubic term. If the corresponding coefficient is positive, the value of FEV.1 is in positive correlation with this term, and vice versa.
 
 \newpage
 ## Problem (e)
@@ -147,11 +147,18 @@ p2
 ```{r}
 anova(fit6.ML, fit9.ML)
 ```
-I did an ANOVA test on the two models, the p-vlaue was smaller than 0.0001. Thus the null was rejected, suggesting that model(3) with more variables does provide better fit of the data.
+I did an ANOVA test on the two models, where the null hypotheses is that the smaller model(model(2)) provide better fit of the data. The p-vlaue of the test was smaller than 0.0001, indicating the null should be rejected under a significance level of 0.05, suggesting that model(3) with more variables actually provide better fit of the data.
 
 
 ## Problem (f)
+```{r}
+summary(fit6.ML)$tTable
+```
 
+I would choose model(3).
 
+* It could be seen in part(c) that model(3) provide better fit of the data, with curves detailedly captured the trend at the begining and end of the real data.
 
+* Given the result of model(3), the p-values of the $age^2$ and $age^3$ term are both far smaller than 0.05, indicating that they both add significantly better explanation for the data. Abandoning them would be unjustified.
 
+* Given the result of the ANOVA test as above, we shouldn't adopt the parsimonious model.

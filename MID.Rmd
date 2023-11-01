@@ -96,7 +96,7 @@ $$Y_{ki} = \beta_0 + \beta_1\cdot Age_{ki} + \beta_2\cdot Age_{ki}^2+ \beta_3\cd
 $$Cov[W_k(T_{ki}), W_k(T_{kj})] = \sigma_W^2 (1-n) exp\{-U_{k,ij}/range\}$$
 where $n$ denotes the nugget effect.
 
-```{r}
+```{r chunk_coef table}
 coef = t((data.frame(
   fit5 = c(summary(fit5.ML)$coefficients$fixed, sqrt(diag(summary(fit5.ML)$varFix))),
   fit6  = c(summary(fit6.ML)$coefficients$fixed, sqrt(diag(summary(fit6.ML)$varFix)))
