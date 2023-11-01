@@ -1,8 +1,8 @@
 ---
-title: "MID"
-author: "Zirui Zhang"
-date: "2023-10-25"
-output: pdf_document
+title: "Code Appendix"
+output: 
+  pdf_document:
+    number_sections: true
 ---
 
 ```{r setup, message=FALSE}
@@ -14,6 +14,7 @@ library(lme4)
 ```
 
 ```{r chunk_data import, message=FALSE}
+# load data and data preparation
 load("~/Documents/2023Fall/P8157/P8157/Six Cities.RData")
 data = topeka |>  group_by(id) |> filter(n() >= 5) |> ungroup()
 length(unique(data$id))
@@ -23,80 +24,56 @@ data = data |>
          age.3 = age^3)
 ```
 
-## Question (a)
-Produce a figure of the response, Yki as a function of age. On the figure indicate the individual
-trajectories for a random sample of 4 girls.
-```{r chunk_sample and plot, message=FALSE}
+```{r chunk_sample, message=FALSE}
+# random sample of 4, plot
 set.seed(200324)
 sample = data  |> 
   filter(id %in% sample(unique(data$id), 4))
-ggplot(data, aes(x = age, y = y, group = id, color = id)) + 
+p = ggplot(data, aes(x = age, y = y, group = id, color = id)) + 
   geom_line() +  
   geom_line(data = sample, color = "green") +
   theme_classic()
 ```
 
-## Question (b)
 ```{r chunk_model fitting}
 # 1 naivee
 fit1.ML = glm(y ~ age + age.2 + age.3, data, family=gaussian)
-
 # 2 randon intercept + independent error
 fit2.ML = lme(fixed=y ~ age + age.2 + age.3, random=reStruct(~ 1 | id), data, method="ML")
-
 # 3 random intercept/slope + independent error
 fit3.ML = lme(fixed=y ~ age + age.2 + age.3, random=reStruct(~ age | id, pdClass="pdDiag"), data, method="ML")
-
 # 4. random intercept + auto_regressive error
 fit4.ML = lme(fixed=y ~ age + age.2 + age.3, random=reStruct(~ 1 | id), correlation=corAR1(form= ~ age| id), data, method="ML")
-
 # 5 random intercept + exponential spatial error
 fit5.ML = lme(fixed=y ~ age + age.2 + age.3, random=reStruct(~ 1 | id), correlation=corExp(form= ~ age| id), data, method="ML")
-
 # 6 random intercept + exponential spatial error + independent homo error
 fit6.ML = lme(fixed=y ~ age + age.2 + age.3, random=reStruct(~ 1 | id), correlation=corExp(form= ~ age| id, nugget=TRUE), data, method="ML")
-
 # 7 random intercept + independent hetero error
 data_cat = data |> 
   dplyr::mutate(age.cat = floor(age/2))
 fit7.ML = lme(fixed=y ~ age + age.2 + age.3, random=reStruct(~ 1 | id), weights=varIdent(form= ~1 | age.cat), data_cat, method="ML")
-
 # 8 random intercept/slope + independent hetero error
 fit8.ML = lme(fixed=y ~ age + age.2 + age.3, random=reStruct(~ age | id), weights=varIdent(form= ~1 | age.cat), data_cat, method="ML")
 ```
 
 ```{r chunk_model summary}
+# model summary and comparison
 sum = (data.frame(
   logLik = c(logLik(fit1.ML), logLik(fit2.ML), logLik(fit3.ML),logLik(fit4.ML),
              logLik(fit5.ML), logLik(fit6.ML), logLik(fit7.ML), logLik(fit8.ML)),
   AIC = c(AIC(fit1.ML),AIC(fit2.ML),AIC(fit3.ML),AIC(fit4.ML),
           AIC(fit5.ML),AIC(fit6.ML),AIC(fit7.ML),AIC(fit8.ML))
 ))
-
 colnames(sum) = c("log-Like", "AIC")
 rownames(sum) = c("0. Independence", "1. Random intercept + inde. errors", 
                   "2. Random intercept/slope + inde. errors", "3. Random intercept + AR errors",
                   "4. Random intercept + ES errors", "5. Random intercept + ES with a 'nugget'",
                   "6. Random intercept + heteroske inde. errors",
                   "7. Random intercept/slope + heteroske inde. errors")
-knitr::kable(sum, format = "markdown")
 ```
 
-Model 4 and 5 give the largest loglikelihood and lowest AIC, provide best fits of the data.
-
-* Model 4:
-$$Y_{ki} = \beta_0 + \beta_1\cdot Age_{ki} + \beta_2\cdot Age_{ki}^2+ \beta_3\cdot Age_{ki}^3 + \gamma_{0k} + W_k(T_{ki})+\epsilon_{ki}^*$$
-$$Cov[W_k(T_{ki}), W_k(T_{kj})] = \sigma_W^2exp\{-U_{k,ij}/range\}$$
-
-where $U_{k,ij} = |T_{ki}-T_{kj}|$
-  
-* Model 5:
-
-$$Y_{ki} = \beta_0 + \beta_1\cdot Age_{ki} + \beta_2\cdot Age_{ki}^2+ \beta_3\cdot Age_{ki}^3 + \gamma_{0k} + W_k(T_{ki})+\epsilon_{ki}^*$$
-$$Cov[W_k(T_{ki}), W_k(T_{kj})] = \sigma_W^2 (1-n) exp\{-U_{k,ij}/range\}$$
-where $n$ denotes the nugget effect.
-
-```{r}
+```{r chunk_coef table}
+# coefficient summary for model4&5
 coef = t((data.frame(
   fit5 = c(summary(fit5.ML)$coefficients$fixed, sqrt(diag(summary(fit5.ML)$varFix))),
   fit6  = c(summary(fit6.ML)$coefficients$fixed, sqrt(diag(summary(fit6.ML)$varFix)))
@@ -104,16 +81,14 @@ coef = t((data.frame(
 rownames(coef) = c("Model.4", "Model.5")
 colnames(coef) = c("b0", "b1", "b2", "b3",
                    "sd(b0)", "sd(b1)", "sd(b2)", "sd(b3)")
-knitr::kable(coef, format = "markdown")
 ```
 
-## Question (c)
 ```{r}
 # fit6.ML = lme(fixed=y ~ age + age.2 + age.3, random=reStruct(~ 1 | id), correlation=corExp(form= ~ age| id, nugget=TRUE), data, method="ML")
 fit9.ML = lme(fixed=y ~ age, random=reStruct(~ 1 | id), correlation=corExp(form= ~ age| id, nugget=TRUE), data, method="ML")
 predict.1 = predict(fit6.ML, sample)
 predict.2 = predict(fit9.ML, sample)
-ggplot(data, aes(x = age, y = y, group = id, color = id)) + 
+p2 = ggplot(data, aes(x = age, y = y, group = id, color = id)) + 
   geom_line(data = sample, color = "green") +
   geom_line(data = sample, aes(y = predict.1), color = "blue", linetype = "dashed") +
   geom_line(data = sample, aes(y = predict.2), color = "brown", linetype = "dashed") +
@@ -121,18 +96,62 @@ ggplot(data, aes(x = age, y = y, group = id, color = id)) +
 ```
 
 
+\newpage
+## Problem (a)
 
-## Question (d)
-no inter for coef, fit curve visually
+Here's the figure for the whole population and a random sample of 4:
+```{r chunk_sample and plot, message=FALSE}
+p
+```
+
+\newpage
+## Problem (b)
+
+Here's the model summaries:
+```{r chunk_b, message=FALSE}
+knitr::kable(sum, format = "markdown")
+```
+
+Model 4 and 5 give the largest loglikelihood and lowest AIC, provide best fits of the data.
+
+* Model 4:
+$$Y_{ki} = \beta_0 + \beta_1\cdot Age_{ki} + \beta_2\cdot Age_{ki}^2+ \beta_3\cdot Age_{ki}^3 + \gamma_{0k} + W_k(T_{ki})+\epsilon_{ki}^*$$
+$$Cov[W_k(T_{ki}), W_k(T_{kj})] = \sigma_W^2exp\{-U_{k,ij}/range\}$$ where $U_{k,ij} = |T_{ki}-T_{kj}|$
+  
+* Model 5:
+
+$$Y_{ki} = \beta_0 + \beta_1\cdot Age_{ki} + \beta_2\cdot Age_{ki}^2+ \beta_3\cdot Age_{ki}^3 + \gamma_{0k} + W_k(T_{ki})+\epsilon_{ki}^*$$
+$$Cov[W_k(T_{ki}), W_k(T_{kj})] = \sigma_W^2 (1-n) exp\{-U_{k,ij}/range\}$$ where $n$ denotes the nugget effect.
+
+Here's the coefficient summaries of the two models:
+
+```{r}
+knitr::kable(coef, format = "markdown")
+```
+
+\newpage
+## Problem (c)
+
+Here's the fitted regression curve for the 4 random samples, where green lines are the true Y's, blue lines are the regression curves for model(3) and brown lines for model(2).
+```{r}
+p2
+```
+
+## Problem (d)
 
 
-## Question (e)
+
+\newpage
+## Problem (e)
 
 ```{r}
 anova(fit6.ML, fit9.ML)
 ```
 I did an ANOVA test on the two models, the p-vlaue was smaller than 0.0001. Thus the null was rejected, suggesting that model(3) with more variables does provide better fit of the data.
 
-## Question (f)
-complexity of the model...
+
+## Problem (f)
+
+
+
 
