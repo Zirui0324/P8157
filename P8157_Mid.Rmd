@@ -83,7 +83,7 @@ colnames(coef) = c("b0", "b1", "b2", "b3",
                    "sd(b0)", "sd(b1)", "sd(b2)", "sd(b3)")
 ```
 
-```{r}
+```{r chunk_message=F}
 # fit6.ML = lme(fixed=y ~ age + age.2 + age.3, random=reStruct(~ 1 | id), correlation=corExp(form= ~ age| id, nugget=TRUE), data, method="ML")
 fit9.ML = lme(fixed=y ~ age, random=reStruct(~ 1 | id), correlation=corExp(form= ~ age| id, nugget=TRUE), data, method="ML")
 predict.1 = predict(fit6.ML, sample)
@@ -92,6 +92,13 @@ p2 = ggplot(data, aes(x = age, y = y, group = id, color = id)) +
   geom_line(data = sample, color = "green") +
   geom_line(data = sample, aes(y = predict.1), color = "blue", linetype = "dashed") +
   geom_line(data = sample, aes(y = predict.2), color = "brown", linetype = "dashed") +
+  theme_classic()
+data$m3 = predict(fit6.ML, data)
+data$m2 = predict(fit9.ML, data)
+p3 = ggplot(data, aes(x=age, y=y), color = id) +
+  geom_point() +
+  geom_smooth(aes(y=m3), se = F, color = "blue") +
+  geom_smooth(aes(y=m2), se = F, color = "brown") +
   theme_classic()
 ```
 
@@ -132,14 +139,15 @@ knitr::kable(coef, format = "markdown")
 \newpage
 ## Problem (c)
 
-Here's the fitted regression curve for the 4 random samples, where green lines are the true Y's, blue lines are the regression curves for model(3) and brown lines for model(2). We can see that model(3) generally provide better fit for the real data.
-```{r}
+Here's the fitted regression curve for the 4 random samples and the whole population, where green lines are the true Y's, blue lines are the regression curves for model(3) and brown lines for model(2). We can see that model(3) generally provide better fit for the real data.
+```{r chunk_message=F}
 p2
+p3
 ```
 
 ## Problem (d)
 
-In model(3), all children have a shared baseline value for FEV.1 regardless of their age. As age increases, the change in their expected FEV.1 value is assumed to be related to age, its quadratic term as well as its cubic term. If the corresponding coefficient is positive, the value of FEV.1 is in positive correlation with this term, and vice versa.
+In model(3), the outcome interest of the children increase with the increase of their age. The increasing trend was not obvious when they're young (before 9 yrs) or older (after 16 yrs) but was evident in between. Besides, each children seems to have unique baseline outcome.
 
 \newpage
 ## Problem (e)
