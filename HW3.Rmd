@@ -1,0 +1,95 @@
+---
+title: "HW3"
+author: "Zirui Zhang"
+output: 
+  pdf_document:
+    number_sections: true
+---
+
+```{r setup, message=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+library(nlme)
+library(lme4)
+library("car")
+```
+
+```{r chunk_data import}
+load("~/Documents/2023Fall/P8157/P8157/WtLoss.RData")
+data = wtloss
+p1 = ggplot(data, aes(x = time, y = weight, group = id, color = as.factor(diet))) + 
+  geom_line() +  
+  facet_grid(~diet) + 
+  theme_classic()
+```
+
+```{r chunk_(a)}
+fit1 = lme(fixed = weight ~ diet*time, random=reStruct(~ 1 | id), data=data, method="ML")
+fit2 = lme(fixed = weight ~ diet*time, random=reStruct(~ diet | id), data=data, method="ML")
+# fixed effect
+fixed = data.frame(
+  coef.fit1 = c(summary(fit1)$coefficients$fixed),
+  sd.fit1 = c(sqrt(diag(summary(fit1)$varFix))),
+  coef.fit2 = c(summary(fit2)$coefficients$fixed),
+  sd.fit2 = c(sqrt(diag(summary(fit2)$varFix)))
+)
+rownames(fixed) = c("Intercept, b0", "Main effect for diet, b1", 
+                    "Main effect for time, b2", "Interaction, b3")
+colnames(fixed) = c("Est.fit1", "SE.fit1","Est.fit2", "SE.fit2")
+# random effect
+random = data.frame(
+  ran.fit1 = c(as.numeric(VarCorr(summary(fit1))[1,2]), NA, summary(fit1)$sigma),
+  ran.fit2 = c(as.numeric(VarCorr(summary(fit2))[1,2]), as.numeric(VarCorr(summary(fit2))[2,2]), summary(fit2)$sigma)
+)
+rownames(random) = c("SD of random intercepts", "SD of random slope", 
+                    "SD of errors")
+colnames(random) = c("fit1", "fit2")
+```
+
+```{r chunk_(b), warning=FALSE}
+sim= simulate(fit1, nsim = 1000, seed = 1504, fit2,
+         method = c("ML"))
+lrt = data.frame(stat = sim$alt$ML[, "logLik"]/sim$null$ML[, "logLik"])
+```
+
+```{r chunk_(c), warning=FALSE}
+# residuals - stage 1 and random intercept
+epsHat = data.frame(eps = resid(fit1, type="normalized"))
+gammaHat = data.frame(gam = ranef(fit1)[,1])
+epsHat$diet = as.factor(data$diet)
+epsHat$time = as.factor(floor(data$time/2))
+# box plot mean model - diet - stage 1
+p2 = ggplot(epsHat, aes(x = diet, y = eps)) + geom_boxplot()
+# box plot mean model - time - stage 1
+p3 = ggplot(epsHat, aes(x = time, y = eps)) + geom_boxplot()
+# scatterplot for dependence model - stage 1
+p4 = epsHat |> mutate(time = as.numeric(time)) |> filter(time > 3) |> 
+  ggplot(aes(x = lag(eps), y = eps)) + geom_point() +geom_smooth()
+# qqplot for normality - both
+p5 = qqPlot(epsHat$eps, xlab = "Theoretical quantiles", ylab = "Sample quantiles", main = "Stage 1 residuals")
+p6 = qqPlot(gammaHat$gam, xlab = "Theoretical quantiles", ylab = "Sample quantiles", main = "Random intercepts")
+```
+
+
+## Question (a)
+
+```{r}
+p1
+knitr::kable(fixed, format = "markdown")
+knitr::kable(random, format = "markdown")
+```
+
+## Question (b)
+
+$$H_0: \beta = \begin{bmatrix}
+\beta_0\\
+0
+\end{bmatrix}$$
+
+$$H_1: \beta = \begin{bmatrix}
+\beta_0\\
+\beta_1
+\end{bmatrix}$$
+
+
