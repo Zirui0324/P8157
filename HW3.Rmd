@@ -18,15 +18,13 @@ library(geepack)
 
 ```{r chunk_data import}
 load("~/Documents/2023Fall/P8157/P8157/WtLoss.RData")
-data = wtloss
+data = wtloss |> 
+  mutate(diet = as.factor(diet))
 p0 = ggplot(data, aes(x = time, y = weight, group = id, color = as.factor(diet))) + 
   geom_line() +  
   facet_grid(~diet) + 
   theme_classic()
-d0 = data |> 
-  mutate(diet = as.factor(diet))
 ```
-
 ```{r chunk_(a)}
 fit1 = lme(fixed = weight ~ diet*time, random=reStruct(~ 1 | id), data=data, method="ML")
 fit2 = lme(fixed = weight ~ diet*time, random=reStruct(~ time | id), data=data, method="ML")
@@ -37,8 +35,10 @@ fixed = data.frame(
   coef.fit2 = c(summary(fit2)$coefficients$fixed),
   sd.fit2 = c(sqrt(diag(summary(fit2)$varFix)))
 )
-rownames(fixed) = c("Intercept, b0", "Main effect for diet, b1", 
-                    "Main effect for time, b2", "Interaction, b3")
+rownames(fixed) = c("Intercept, b0",
+                    "Main effect for diet1, b1", "Main effect for diet2, b2",
+                    "Main effect for time, b3", 
+                    "Interaction for diet1, b4", "Interaction for diet2, b5")
 colnames(fixed) = c("Est.fit1", "SE.fit1","Est.fit2", "SE.fit2")
 # random effect
 random = data.frame(
@@ -52,8 +52,11 @@ colnames(random) = c("fit1", "fit2")
 ```{r chunk_(b), warning=FALSE}
 sim = simulate(fit1, nsim = 1000, seed = 1504, fit2, method = "ML")
 lrt = data.frame(stat = -2*(-sim$alt$ML[, "logLik"]+sim$null$ML[, "logLik"]))
+lrt_95 = quantile(lrt$stat, 0.95)
 data1 = data.frame(x = rchisq(1000, df = 1))
 data2 = data.frame(x = rchisq(1000, df = 2))
+lrt_1 = quantile(data1$x, 0.95)
+lrt_2 = quantile(data2$x, 0.95)
 p1 = ggplot() +
   geom_histogram(data = data1, aes(x = x, y = ..density..),
                  bins = 100, fill = "blue", alpha = 0.5) +
@@ -61,8 +64,14 @@ p1 = ggplot() +
                  bins = 100, fill = "green", alpha = 0.5) +
   geom_histogram(data = lrt, aes(x = stat, y = ..density..),
                  bins = 100, fill = "black", alpha = 0.8) +
+  geom_vline(xintercept = lrt_95, linetype = "dashed", color = "black") +
+  geom_vline(xintercept = lrt_1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = lrt_2, linetype = "dashed", color = "green") +
   labs(x = "LRT statistic",
        y = "Density") +
+  annotate("text", x = 2.5, y = 0.6, label = "Chi-square 1", color = "blue") +
+  annotate("text", x = 6.5, y = 0.6, label = "Chi-square 2", color = "green") +
+  annotate("text", x = 4.7, y = 0.6, label = "LRT", color = "black") +
   theme_minimal()
 ```
 ```{r chunk_(c), warning=FALSE}
@@ -84,35 +93,62 @@ fit.I = geeglm(weight ~ diet*time, id=id, data, family=gaussian, scale.fix=TRUE,
 fit.E = geeglm(weight ~ diet*time, id=id, data, family=gaussian, scale.fix=TRUE, corstr="exchangeable")
 fit.AR = geeglm(weight ~ diet*time, id=id, data, family=gaussian, scale.fix=TRUE, corstr="ar1")
 est = data.frame(
-  est = c(summary(fit.I)$coefficients[1][[1]][2:4], 
-          summary(fit.E)$coefficients[1][[1]][2:4],
+  est = c(summary(fit.I)$coefficients[1][[1]][2:6], 
+          summary(fit.E)$coefficients[1][[1]][2:6],
           summary(fit.E)$geese$correlation[1,1],
-          summary(fit.AR)$coefficients[1][[1]][2:4],
+          summary(fit.AR)$coefficients[1][[1]][2:6],
           summary(fit.AR)$geese$correlation[1,1]),
-  se = c(summary(fit.I)$coefficients[2][[1]][2:4],
-         summary(fit.E)$coefficients[2][[1]][2:4],
+  se = c(summary(fit.I)$coefficients[2][[1]][2:6],
+         summary(fit.E)$coefficients[2][[1]][2:6],
          summary(fit.E)$geese$correlation[1,2],
-         summary(fit.AR)$coefficients[2][[1]][2:4],
+         summary(fit.AR)$coefficients[2][[1]][2:6],
          summary(fit.AR)$geese$correlation[1,2])
 )
-rownames(est) = c("GEE-I: diet", "GEE-I: time", "GEE-I: time*diet",
-                  "GEE-E: diet", "GEE-E: time", "GEE-E: time*diet", "GEE-E: rho",
-                  "GEE-AR1: diet", "GEE-AR1: time", "GEE-AR1: time*diet", "GEE-AR1: ")
+rownames(est) = c("GEE-I: diet1", "GEE-I: diet2", "GEE-I: time",
+                  "GEE-I: time*diet1", "GEE-I: time*diet2",
+                  "GEE-E: diet1", "GEE-E: diet2", "GEE-E: time",
+                  "GEE-E: time*diet1", "GEE-E: time*diet2","GEE-E: rho",
+                  "GEE-AR1: diet1", "GEE-AR1: diet2", "GEE-AR1: time",
+                  "GEE-AR1: time*diet1", "GEE-AR1: time*diet2", "GEE-AR1: rho")
 colnames(est) = c("Est", "SE")
 ```
 ```{r chunk_(e)}
 fit.E.2 = geeglm(weight ~ diet+time, id=id, data, family=gaussian, scale.fix=TRUE, corstr="exchangeable")
 ```
 
+\newpage
+```{r}
+# spaghetti plot for different diets.
+p0
+```
+We can see the intercepts across different clusters have high variability, and different clusters tend to have different slopes at the same time points.
 
 \newpage
 ## Question (a)
 
 ```{r}
-p0
 knitr::kable(fixed, format = "markdown")
 knitr::kable(random, format = "markdown")
 ```
+Interpretation for the fixed effects of Model 2:
+
+* $\beta_0$: 250.99, the average baseline weight for patients assigned to diet 0 is 250.99 pounds.
+
+* $\beta_1$: -0.6964, the average decrease in baseline weight when comparing those on diet 1 to diet 0 is 0.6964.
+
+* $\beta_2$: -2.6879, the average decrease in baseline weight when comparing those on diet 2 to diet 0 is 2.6879.
+
+* $\beta_3$: 0.0191, the average increase in weight for those on diet 0 is 0.0191 with unit increase in time.
+
+* $\beta_4$: -0.1022, the average difference in weight decrese along unit increase in time when comparing those on diet 1 to those on diet 0 is 0.1022.
+
+* $\beta_5$: -0.4909, the average difference in weight decrese along unit increase in time when comparing those on diet 2 to those on diet 0 is 0.4909.
+
+Interpretation for the variance components of Model 2:
+
+* $\sigma_{\gamma,0}$ : 3.1589, standard deviation of the random intercept, represents the amount of variability in the intercepts among different clusters. The variation is pretty large.
+
+* $\sigma_{\gamma,1}$: 0.1581, standard deviation of the random slope, represents the amount of variability in the effect of time among different clusters.
 
 \newpage
 ## Question (b)
@@ -130,18 +166,35 @@ $$H_1: G(a) = \begin{bmatrix}
 p1
 ```
 
+The sampling distribution seems to be a 50:50 mixture of the $\chi_1^2$ and $\chi_2^2$ distribution. The one-side 95% percentile of lrt lies between those of the $\chi_1^2$ and $\chi_2^2$ distribution.
+
+From this plot, we may make the preliminary conclusion that the random slope term is significant, the random slope/intercept model is more adequate than the random intercept model.
+
 
 \newpage
 ## Question (c)
-```{r chunk_c, message=FALSE, warning=FALSE}
+```{r chunk_cc, message=FALSE, warning=FALSE}
 # box plot mean model - diet - stage 1
 # box plot mean model - time - stage 1
 # scatterplot for dependence model - stage 1
 (p2+p3)/p4
+```
+
+* In the standardized stage 1 residual plot, there's inconclusive evidence regarding heteroskedasticity by diet, but presents strong evidence of heteroskedasticity by time.
+
+* In the residual and lagged residual plot, there presents no local correlation, thus no serial dependence.
+
+```{r chunk_c, message=FALSE, warning=FALSE}
 # qqplot for normality - both
 qqPlot(epsHat$eps, xlab = "Theoretical quantiles", ylab = "Sample quantiles", main = "Stage 1 residuals") + 
 qqPlot(gammaHat$gam, xlab = "Theoretical quantiles", ylab = "Sample quantiles", main = "Random intercepts")
 ```
+
+* In the Q-Q plots, the stage 1 residuals and random effect estimates seem perfectly normal.
+
+All the results are consistent with what we concluded from part(b).
+
+
 
 \newpage
 ## Question (d)
@@ -150,9 +203,70 @@ qqPlot(gammaHat$gam, xlab = "Theoretical quantiles", ylab = "Sample quantiles", 
 knitr::kable(est, format = "markdown")
 ```
 
+Interpretation for GEE-E model:
+
+* $\beta_1$: -0.6462, the average decrease in baseline weight when comparing those on diet 1 to diet 0 is 0.6462.
+
+* $\beta_2$: -2.6605, the average decrease in baseline weight when comparing those on diet 2 to diet 0 is 2.6605.
+
+* $\beta_3$: 0.0399, the average increase in weight for those on diet 0 is 0.0399 with unit increase in time.
+
+* $\beta_4$: -0.1237, the average difference in weight decrese along unit increase in time when comparing those on diet 1 to those on diet 0 is 0.1237.
+
+* $\beta_5$: -0.5003, the average difference in weight decrese along unit increase in time when comparing those on diet 2 to those on diet 0 is 0.5003.
+
+\newpage
 ## Question (e)
+$$H_0: 
+\begin{bmatrix}
+0 & 0 & 0 & 0 & 1 & 0\\
+0 & 0 & 0 & 0 & 0 & 1
+\end{bmatrix}
+\begin{bmatrix}
+\beta_0\\ 
+\beta_1\\ 
+\beta_2\\ 
+\beta_3\\ 
+\beta_4\\ 
+\beta_5 
+\end{bmatrix} 
+= 
+\begin{bmatrix} 
+\beta_4\\ 
+\beta_5 
+\end{bmatrix} 
+=0 $$
+
+$$H_1: 
+\begin{bmatrix} 
+0 & 0 & 0 & 0 & 1 & 0\\ 
+0 & 0 & 0 & 0 & 0 & 1 
+\end{bmatrix}
+\begin{bmatrix} 
+\beta_0\\ 
+\beta_1\\ 
+\beta_2\\ 
+\beta_3\\ 
+\beta_4\\ 
+\beta_5 
+\end{bmatrix} 
+= 
+\begin{bmatrix} 
+\beta_4\\ 
+\beta_5 
+\end{bmatrix} 
+\ne 0
+$$
 ```{r}
-QIC(fit.E, fit.E.2)
+anova(fit.E.2, fit.E)
 ```
+We had better use the model with the interaction term between time and diet. 
+
+Description:
+
+In the 3 diet groups, patients on diet1 and diet2 lose more weight than patients on diet0 across the same time period/at the same time points; and patients on diet2 lose more than those on diet1 across the same time period/at the same time points.
+
 
 ## Question (f)
+
+If the mean model is correctly specified, the point estimates from the LMM and GEE model should all be consistent (unbiased). When the dependence structure is correctly specified, the LMM standard errors should be valid. When the dependence structure is not necessarily correct, with the sandwich-based estimator, we could still get valid standard error estimates for GEE.
