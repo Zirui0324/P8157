@@ -1,5 +1,5 @@
 ---
-title: "HW3"
+title: "Code Appendix"
 author: "Zirui Zhang"
 output: 
   pdf_document:
@@ -13,20 +13,23 @@ library(patchwork)
 library(nlme)
 library(lme4)
 library("car")
+library(geepack)
 ```
 
 ```{r chunk_data import}
 load("~/Documents/2023Fall/P8157/P8157/WtLoss.RData")
 data = wtloss
-p1 = ggplot(data, aes(x = time, y = weight, group = id, color = as.factor(diet))) + 
+p0 = ggplot(data, aes(x = time, y = weight, group = id, color = as.factor(diet))) + 
   geom_line() +  
   facet_grid(~diet) + 
   theme_classic()
+d0 = data |> 
+  mutate(diet = as.factor(diet))
 ```
 
 ```{r chunk_(a)}
 fit1 = lme(fixed = weight ~ diet*time, random=reStruct(~ 1 | id), data=data, method="ML")
-fit2 = lme(fixed = weight ~ diet*time, random=reStruct(~ diet | id), data=data, method="ML")
+fit2 = lme(fixed = weight ~ diet*time, random=reStruct(~ time | id), data=data, method="ML")
 # fixed effect
 fixed = data.frame(
   coef.fit1 = c(summary(fit1)$coefficients$fixed),
@@ -46,13 +49,22 @@ rownames(random) = c("SD of random intercepts", "SD of random slope",
                     "SD of errors")
 colnames(random) = c("fit1", "fit2")
 ```
-
 ```{r chunk_(b), warning=FALSE}
-sim= simulate(fit1, nsim = 1000, seed = 1504, fit2,
-         method = c("ML"))
-lrt = data.frame(stat = sim$alt$ML[, "logLik"]/sim$null$ML[, "logLik"])
+sim = simulate(fit1, nsim = 1000, seed = 1504, fit2, method = "ML")
+lrt = data.frame(stat = -2*(-sim$alt$ML[, "logLik"]+sim$null$ML[, "logLik"]))
+data1 = data.frame(x = rchisq(1000, df = 1))
+data2 = data.frame(x = rchisq(1000, df = 2))
+p1 = ggplot() +
+  geom_histogram(data = data1, aes(x = x, y = ..density..),
+                 bins = 100, fill = "blue", alpha = 0.5) +
+  geom_histogram(data = data2, aes(x = x, y = ..density..),
+                 bins = 100, fill = "green", alpha = 0.5) +
+  geom_histogram(data = lrt, aes(x = stat, y = ..density..),
+                 bins = 100, fill = "black", alpha = 0.8) +
+  labs(x = "LRT statistic",
+       y = "Density") +
+  theme_minimal()
 ```
-
 ```{r chunk_(c), warning=FALSE}
 # residuals - stage 1 and random intercept
 epsHat = data.frame(eps = resid(fit1, type="normalized"))
@@ -66,30 +78,81 @@ p3 = ggplot(epsHat, aes(x = time, y = eps)) + geom_boxplot()
 # scatterplot for dependence model - stage 1
 p4 = epsHat |> mutate(time = as.numeric(time)) |> filter(time > 3) |> 
   ggplot(aes(x = lag(eps), y = eps)) + geom_point() +geom_smooth()
-# qqplot for normality - both
-p5 = qqPlot(epsHat$eps, xlab = "Theoretical quantiles", ylab = "Sample quantiles", main = "Stage 1 residuals")
-p6 = qqPlot(gammaHat$gam, xlab = "Theoretical quantiles", ylab = "Sample quantiles", main = "Random intercepts")
+```
+```{r chunk_(d)}
+fit.I = geeglm(weight ~ diet*time, id=id, data, family=gaussian, scale.fix=TRUE, corstr="independence")
+fit.E = geeglm(weight ~ diet*time, id=id, data, family=gaussian, scale.fix=TRUE, corstr="exchangeable")
+fit.AR = geeglm(weight ~ diet*time, id=id, data, family=gaussian, scale.fix=TRUE, corstr="ar1")
+est = data.frame(
+  est = c(summary(fit.I)$coefficients[1][[1]][2:4], 
+          summary(fit.E)$coefficients[1][[1]][2:4],
+          summary(fit.E)$geese$correlation[1,1],
+          summary(fit.AR)$coefficients[1][[1]][2:4],
+          summary(fit.AR)$geese$correlation[1,1]),
+  se = c(summary(fit.I)$coefficients[2][[1]][2:4],
+         summary(fit.E)$coefficients[2][[1]][2:4],
+         summary(fit.E)$geese$correlation[1,2],
+         summary(fit.AR)$coefficients[2][[1]][2:4],
+         summary(fit.AR)$geese$correlation[1,2])
+)
+rownames(est) = c("GEE-I: diet", "GEE-I: time", "GEE-I: time*diet",
+                  "GEE-E: diet", "GEE-E: time", "GEE-E: time*diet", "GEE-E: rho",
+                  "GEE-AR1: diet", "GEE-AR1: time", "GEE-AR1: time*diet", "GEE-AR1: ")
+colnames(est) = c("Est", "SE")
+```
+```{r chunk_(e)}
+fit.E.2 = geeglm(weight ~ diet+time, id=id, data, family=gaussian, scale.fix=TRUE, corstr="exchangeable")
 ```
 
 
+\newpage
 ## Question (a)
 
 ```{r}
-p1
+p0
 knitr::kable(fixed, format = "markdown")
 knitr::kable(random, format = "markdown")
 ```
 
+\newpage
 ## Question (b)
-
-$$H_0: \beta = \begin{bmatrix}
-\beta_0\\
-0
+$$H_0: G(a) = \begin{bmatrix}
+\Sigma_{\gamma,00} & 0\\
+0 & 0
 \end{bmatrix}$$
 
-$$H_1: \beta = \begin{bmatrix}
-\beta_0\\
-\beta_1
+$$H_1: G(a) = \begin{bmatrix}
+\Sigma_{\gamma,00} & \Sigma_{\gamma,01}\\
+\Sigma_{\gamma,10} & \Sigma_{\gamma,11}
 \end{bmatrix}$$
 
+```{r chunk_bb, warning=FALSE}
+p1
+```
 
+
+\newpage
+## Question (c)
+```{r chunk_c, message=FALSE, warning=FALSE}
+# box plot mean model - diet - stage 1
+# box plot mean model - time - stage 1
+# scatterplot for dependence model - stage 1
+(p2+p3)/p4
+# qqplot for normality - both
+qqPlot(epsHat$eps, xlab = "Theoretical quantiles", ylab = "Sample quantiles", main = "Stage 1 residuals") + 
+qqPlot(gammaHat$gam, xlab = "Theoretical quantiles", ylab = "Sample quantiles", main = "Random intercepts")
+```
+
+\newpage
+## Question (d)
+
+```{r}
+knitr::kable(est, format = "markdown")
+```
+
+## Question (e)
+```{r}
+QIC(fit.E, fit.E.2)
+```
+
+## Question (f)
