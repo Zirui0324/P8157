@@ -1,0 +1,78 @@
+---
+title: "Code Appendix"
+author: "Zirui Zhang"
+output: 
+  pdf_document:
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+library(nlme)
+library(lme4)
+library("car")
+library(geepack)
+library(mice)
+library(mitools)
+```
+
+```{r chunk_data import}
+data0 = data.frame(read_excel("./MRI.xlsx", sheet = "Sheet2")) |> 
+  janitor::clean_names() |> 
+  rename("id" = "subject_id",
+         "sex" = "m_f") |> 
+  select(-mri_id, -group, -mr_delay, -hand, -cdr, -asf, -e_tiv, -age) |> 
+  filter(visit != 4 & visit != 5) |> 
+  group_by(id) |> 
+  mutate(base_mmse = ifelse(visit == 1, mmse, 0),
+         sex = ifelse(sex == "M", 0, 1)) |> 
+  ungroup()
+data0$base_mmse = ifelse(data0$base_mmse == 0, NA, data0$base_mmse)
+data0 = data0 |> fill(base_mmse)
+```
+
+```{r chunk_missing data_1}
+# filter out patients with incoherent data
+is_coherent = function(visit) {
+  all(diff(visit) == 1)
+}
+data = data0 |> group_by(id)  |> filter(is_coherent(visit)) |> ungroup() |> as.data.frame()
+# define complete subjects
+ids = length(unique(data$id))
+length(data$visit[data$visit == 1]) # 144
+length(data$visit[data$visit == 2]) # 144
+length(data$visit[data$visit == 3]) # 52
+idsC = unique(data$id[data$visit == 3])
+data$completer = as.numeric(is.element(data$id, idsC))
+data = data |> 
+  select(id, visit, completer, sex, educ, ses, base_mmse, n_wbv)
+# overall drop-out rate
+num_drop = length(unique(data[data$completer == 0, ]$id))
+p_drop = num_drop/ids # 63.89%
+# missing value for predictors
+null_counts = colSums(is.na(data)) # missing mmse is not the baseline mmese, never mind
+median_ses = median(data$ses, na.rm = TRUE) # impute missing as median in ses
+data$ses = ifelse(is.na(data$ses), median_ses, data$ses)
+```
+
+```{r chunk_missing data_2}
+# missing data imputation for the outcome variable
+md.pattern(data)
+imp <- mice(data, maxit = 2, m = 2, seed = 200427)
+```
+
+
+
+```{r}
+d1 = data |> filter(base_mmse != 0)
+fit = lm(n_wbv ~ base_mmse + sex + educ, data = d1)
+summary(fit)
+```
+
+
+
+
