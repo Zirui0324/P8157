@@ -10,45 +10,62 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-#Simulate data with continuous confounder and outcome, binomial exposure.
-#Marginal causal effect of exposure on outcome: 10.
-n <- 1000
-simdat <- data.frame(l = rnorm(n, 10, 5))
-a.lin <- simdat$l - 10
-pa <- exp(a.lin)/(1 + exp(a.lin))
-simdat$a <- rbinom(n, 1, prob = pa)
-simdat$y <- 10*simdat$a + 0.5*simdat$l + rnorm(n, -10, 5)
-simdat[1:5,]
+imp = mice(data, m = 20)
 
-#Estimate ipw weights.
-temp <- ipwpoint(
-   exposure = a,
-   family = "binomial",
-   link = "logit",
-   numerator = ~ 1,
-   denominator = ~ l,
-   data = simdat)
-summary(temp$ipw.weights)
+new_data <- lapply(1:20, function(i) {
+  di <- complete(imp, i)
+  di$nonmissY <- !is.na(data$n_wbv)
+  
+  ps_fit <- glm(completer ~ visit+sex+educ+ses+base_mmse, data = di, family = binomial)
+  
+  di_nonmissY <- subset(di, nonmissY)
+  di_nonmissY$weights <- 1/(fitted(ps_fit)[di$nonmissY])
+  di_nonmissY
+})
 
-#Plot inverse probability weights
-graphics.off()
-ipwplot(weights = temp$ipw.weights, logscale = FALSE,
-   main = "Stabilized weights", xlim = c(0, 8))
+#Check balance between original and weighted nonmissing cases
+# bal_data = purrr::map_dfr(1:20, function(i) {
+#   di <- complete(imp, i)
+#   di$sample <- "full"
+#   di$weights <- 1
+#   new_data[[i]]$sample <- "nonmissing"
+#   
+#   dplyr::bind_rows(di, new_data[[i]])
+# })
+# 
+# cobalt::bal.tab(sample ~ Y + x1 + x2 + x3, data = bal_data,
+#                 weights = "weights", imp = ".imp")
 
-#Examine numerator and denominator models.
-summary(temp$num.mod)
-summary(temp$den.mod)
+#Estimate and combine effects
+fits <- lapply(new_data, function(di) {
+  lm(n_wbv ~ visit+sex+educ+ses+base_mmse, data = di, weights = weights)
+})
 
-#Paste inverse probability weights
-simdat$sw <- temp$ipw.weights
-
-#Marginal structural model for the causal effect of a on y
-#corrected for confounding by l using inverse probability weighting
-#with robust standard error from the survey package.
-require("survey")
-msm <- (svyglm(y ~ a, design = svydesign(~ 1, weights = ~ sw,
-   data = simdat)))
-coef(msm)
-confint(msm)
+betas = mitools::MIextract(fits,fun = coef)
+#Need robust SE for weights
+vars = mitools::MIextract(fits, fun = sandwich::vcovHC)
+summary(mitools::MIcombine(betas, vars))
 ```
+
+```{r}
+# Imputation using mice and IPW
+imp = mice(data_miss, m = 20)
+completed_datasets = list()
+# Loop over each imputation
+for (i in 1:20) {
+  # Obtain the completed dataset for imputation i
+  di = complete(imp, i)
+  # Add weights based on IPW to the completed dataset
+  di$nonmissY = !is.na(data_miss$n_wbv)
+  ps_fit = glm(completer ~ visit + sex + educ + ses + base_mmse, data = di, family = binomial)
+  di$weights = ifelse(di$nonmissY, 1 / fitted(ps_fit)[di$nonmissY], 1)
+  # Append the completed dataset to the list
+  completed_datasets[[i]] = di
+}
+final_imputed_dataset = do.call(rbind, completed_datasets)
+data_full = final_imputed_dataset |> 
+  group_by(id, visit, completer, sex, educ, ses, base_mmse) |> 
+  summarize(n_wbv = mean(n_wbv, na.rm = TRUE))
+```
+
 

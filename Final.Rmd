@@ -18,6 +18,9 @@ library("car")
 library(geepack)
 library(mice)
 library(mitools)
+library(missForest)
+library(survey)
+library(varycoef)
 ```
 
 ```{r chunk_data import}
@@ -35,7 +38,7 @@ data0$base_mmse = ifelse(data0$base_mmse == 0, NA, data0$base_mmse)
 data0 = data0 |> fill(base_mmse)
 ```
 
-```{r chunk_missing data_1}
+```{r chunk_missing data_predictors}
 # filter out patients with incoherent data
 is_coherent = function(visit) {
   all(diff(visit) == 1)
@@ -49,7 +52,9 @@ length(data$visit[data$visit == 3]) # 52
 idsC = unique(data$id[data$visit == 3])
 data$completer = as.numeric(is.element(data$id, idsC))
 data = data |> 
-  select(id, visit, completer, sex, educ, ses, base_mmse, n_wbv)
+  select(id, visit, completer, sex, educ, ses, base_mmse, n_wbv) |> 
+  mutate(id = as.factor(id),
+         sex = as.factor(sex))
 # overall drop-out rate
 num_drop = length(unique(data[data$completer == 0, ]$id))
 p_drop = num_drop/ids # 63.89%
@@ -59,19 +64,77 @@ median_ses = median(data$ses, na.rm = TRUE) # impute missing as median in ses
 data$ses = ifelse(is.na(data$ses), median_ses, data$ses)
 ```
 
-```{r chunk_missing data_2}
+```{r chunk_missing data_outcome}
+only2 = data |> group_by(id) |> 
+  filter(n() == 2)
+visit3 = only2 |> 
+  mutate(visit = 3, n_wbv = NA) |> 
+  distinct()
+data_miss = bind_rows(data, visit3) |> arrange(id, visit)
 # missing data imputation for the outcome variable
-md.pattern(data)
-imp <- mice(data, maxit = 2, m = 2, seed = 200427)
+## mice
+md.pattern(data_miss)
+formula = as.formula("n_wbv ~ id + visit + sex + educ + ses + base_mmse")
+imp <- mice(data_miss, method = "midastouch", seed = 200427,
+            formulas = formula)
+new.2 = complete(imp)
+
+## miss.forest
+miss.imp =  missForest(data_miss[, 2:7])$ximp
+
+## mice and ipwF
+imp = mice(data_miss, m = 20, seed=200427)
+completed_datasets = list()
+# Loop over each imputation
+for (i in 1:20) {
+  # completed dataset for imputation i
+  di = complete(imp, i)
+  # add weights based on ipw
+  di$nonmissY = !is.na(data_miss$n_wbv)
+  ps_fit = glm(completer ~ visit + sex + educ + ses + base_mmse, data = di, family = binomial)
+  di$weights = ifelse(di$nonmissY, 1 / fitted(ps_fit)[di$nonmissY], 1)
+  completed_datasets[[i]] = di
+}
+imputed_dataset = do.call(rbind, completed_datasets)
+data_imp= imputed_dataset |> 
+  group_by(id, visit, completer, sex, educ, ses, base_mmse) |> 
+  summarize(n_wbv = round(min(n_wbv, na.rm = TRUE), 3))
+```
+
+```{r chunk_data preparation}
+az = data.frame(data_imp)
+# baseline character
+length(unique(az$id)) #144
+summary(az$base_mmse)
+p.h1 = az |> ggplot(aes(x = base_mmse)) + geom_histogram()
+p.h2 = az |> ggplot(aes(x = n_wbv)) + geom_histogram()
+az = az|> 
+  select(-completer) |> 
+  mutate(id = as.character(id),
+         educ = scale(educ),
+         ses = scale(ses),
+         base_mmse = scale(base_mmse))
+# spaghetti plot
+p.s = ggplot(az, aes(x = visit, y = n_wbv, group = id)) + geom_line() # random intercept
+```
+
+```{r chunk_gee}
+fit.I = geeglm(n_wbv ~ visit+base_mmse+visit*base_mmse+sex+educ+ses, id=id, az, family=binomial(link="logit"), scale.fix=TRUE, corstr="independence")
+fit.E = geeglm(n_wbv ~ visit+base_mmse+sex+educ+ses, id=id, az, family=binomial(link="logit"), scale.fix=TRUE, corstr="exchangeable")
+fit.AR = geeglm(n_wbv ~ visit+base_mmse+sex+educ+ses, id=id, az, family=binomial(link="logit"), scale.fix=TRUE, corstr="ar1")
+summary(fit.I)
+```
+
+```{r chunk_glmm}
+fit.ri = lme(fixed = n_wbv ~ visit+base_mmse+sex+educ+ses, random=reStruct(~ 1 | id), data=az, method="ML")
+summary(fit.ri)
 ```
 
 
 
-```{r}
-d1 = data |> filter(base_mmse != 0)
-fit = lm(n_wbv ~ base_mmse + sex + educ, data = d1)
-summary(fit)
-```
+
+
+
 
 
 
