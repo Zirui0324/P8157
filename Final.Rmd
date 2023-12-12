@@ -24,21 +24,22 @@ library(varycoef)
 ```
 
 ```{r chunk_data import}
-data0 = data.frame(read_excel("./MRI.xlsx", sheet = "Sheet2")) |> 
+data_whole = data.frame(read_excel("./MRI.xlsx", sheet = "Sheet2")) |> 
   janitor::clean_names() |> 
   rename("id" = "subject_id",
          "sex" = "m_f") |> 
-  select(-mri_id, -group, -mr_delay, -hand, -cdr, -asf, -e_tiv, -age) |> 
-  filter(visit != 4 & visit != 5) |> 
+  dplyr::select(-mri_id, -group, -mr_delay, -hand, -cdr, -asf, -e_tiv, -age) |> 
   group_by(id) |> 
   mutate(base_mmse = ifelse(visit == 1, mmse, 0),
          sex = ifelse(sex == "M", 0, 1)) |> 
   ungroup()
+data0 = data_whole |> 
+  filter(visit != 4 & visit != 5)
 data0$base_mmse = ifelse(data0$base_mmse == 0, NA, data0$base_mmse)
 data0 = data0 |> fill(base_mmse)
 ```
 
-```{r chunk_missing data_predictors}
+```{r chunk_missing data_predictors, warning=FALSE}
 # filter out patients with incoherent data
 is_coherent = function(visit) {
   all(diff(visit) == 1)
@@ -49,6 +50,8 @@ ids = length(unique(data$id))
 length(data$visit[data$visit == 1]) # 144
 length(data$visit[data$visit == 2]) # 144
 length(data$visit[data$visit == 3]) # 52
+length(data_whole$visit[data_whole$visit == 4]) # 15
+length(data_whole$visit[data_whole$visit == 5]) # 6
 idsC = unique(data$id[data$visit == 3])
 data$completer = as.numeric(is.element(data$id, idsC))
 data = data |> 
@@ -64,7 +67,7 @@ median_ses = median(data$ses, na.rm = TRUE) # impute missing as median in ses
 data$ses = ifelse(is.na(data$ses), median_ses, data$ses)
 ```
 
-```{r chunk_missing data_outcome}
+```{r chunk_missing data_outcome, warning=FALSE}
 only2 = data |> group_by(id) |> 
   filter(n() == 2)
 visit3 = only2 |> 
@@ -72,17 +75,7 @@ visit3 = only2 |>
   distinct()
 data_miss = bind_rows(data, visit3) |> arrange(id, visit)
 # missing data imputation for the outcome variable
-## mice
-md.pattern(data_miss)
-formula = as.formula("n_wbv ~ id + visit + sex + educ + ses + base_mmse")
-imp <- mice(data_miss, method = "midastouch", seed = 200427,
-            formulas = formula)
-new.2 = complete(imp)
-
-## miss.forest
-miss.imp =  missForest(data_miss[, 2:7])$ximp
-
-## mice and ipwF
+## multiple imputation
 imp = mice(data_miss, m = 20, seed=200427)
 completed_datasets = list()
 # Loop over each imputation
@@ -101,34 +94,115 @@ data_imp= imputed_dataset |>
   summarize(n_wbv = round(min(n_wbv, na.rm = TRUE), 3))
 ```
 
-```{r chunk_data preparation}
-az = data.frame(data_imp)
+```{r chunk_data preparation, warning=FALSE}
+az0 = data.frame(data_imp)
 # baseline character
-length(unique(az$id)) #144
-summary(az$base_mmse)
-p.h1 = az |> ggplot(aes(x = base_mmse)) + geom_histogram()
-p.h2 = az |> ggplot(aes(x = n_wbv)) + geom_histogram()
-az = az|> 
+length(unique(az0$id)) #144
+summary(az0$base_mmse)
+p.h1 = az0 |> ggplot(aes(x = base_mmse)) + geom_histogram()
+p.h2 = az0 |> ggplot(aes(x = n_wbv)) + geom_histogram()
+length(unique((az0 |> filter(sex == 0))$id)) # 59 male; 85 female
+az = az0|> 
   select(-completer) |> 
   mutate(id = as.character(id),
          educ = scale(educ),
          ses = scale(ses),
          base_mmse = scale(base_mmse))
 # spaghetti plot
-p.s = ggplot(az, aes(x = visit, y = n_wbv, group = id)) + geom_line() # random intercept
+p.s = ggplot(data_whole, aes(x = visit, y = n_wbv, group = id)) + geom_line() # random intercept
 ```
 
-```{r chunk_gee}
+```{r chunk_2stage, warning=FALSE}
+# 2-stage analysis
+K = 144
+az.2 = az |> 
+  group_by(id)  |> 
+  mutate(idd = group_indices())  |> 
+  ungroup() |> 
+  as.data.frame()
+base_mmse = az.2$base_mmse
+# Stage 1
+betaMat = data.frame(beta0=rep(NA, K), beta.time=rep(NA, K))
+for(k in 1:K) {
+  temp.k = az.2[az.2$idd == k,]
+  fit.k = lm(n_wbv ~ visit, data = temp.k)
+  betaMat[k, 1:2] = c(fit.k$coef)
+}
+
+# Stage 2
+data_2 = cbind(base_mmse, betaMat)
+model_visit = lm(beta.time ~ base_mmse, data = data_2)
+sum_2_stage = summary(model_visit)$coefficients
+```
+
+```{r chunk_gee, warning=FALSE}
+# covariance structure
+fitf = lm(n_wbv ~ visit, data = az) 
+resMat = matrix(residuals(fitf), ncol=3, byrow=TRUE)
+sd = round(sqrt(diag(cov(resMat))), 2)
+sd =c(0.04,0.04, 0.04)
+comat = round(cor(resMat), 2)
+diag(comat) = sd # ar1 seems most suitable
+
 fit.I = geeglm(n_wbv ~ visit+base_mmse+visit*base_mmse+sex+educ+ses, id=id, az, family=binomial(link="logit"), scale.fix=TRUE, corstr="independence")
-fit.E = geeglm(n_wbv ~ visit+base_mmse+sex+educ+ses, id=id, az, family=binomial(link="logit"), scale.fix=TRUE, corstr="exchangeable")
-fit.AR = geeglm(n_wbv ~ visit+base_mmse+sex+educ+ses, id=id, az, family=binomial(link="logit"), scale.fix=TRUE, corstr="ar1")
-summary(fit.I)
+fit.E = geeglm(n_wbv ~ visit+base_mmse+visit*base_mmse+sex+educ+ses, id=id, az, family=binomial(link="logit"), scale.fix=TRUE, corstr="exchangeable")
+fit.AR = geeglm(n_wbv ~ visit+base_mmse+visit*base_mmse+sex+educ+ses, id=id, az, family=binomial(link="logit"), scale.fix=TRUE, corstr="ar1")
+summary(fit.AR)
+result.I = data.frame(
+  Est = c(summary(fit.I)$coefficients[1][[1]][1:7],NA),
+  SE = c(summary(fit.I)$coefficients[2][[1]][1:7],NA))
+
+result.E = data.frame(
+  Est = c(summary(fit.E)$coefficients[1][[1]][1:7],
+            summary(fit.E)$geese$correlation[1,1]),
+  SE = c(summary(fit.E)$coefficients[2][[1]][1:7],
+         summary(fit.E)$geese$correlation[1,2]))
+
+result.AR = data.frame(
+  Est = c(summary(fit.AR)$coefficients[1][[1]][1:7],
+            summary(fit.AR)$geese$correlation[1,1]),
+  SE = c(summary(fit.AR)$coefficients[2][[1]][1:7],
+         summary(fit.AR)$geese$correlation[1,2]))
+
+rownames = c("Intercept", "visit", "baseline MMSE",
+                  "sexM:sexF", "education",
+                  "social economic status", "visit*baseline MMSE")
+colnames(est) = c("Est", "SE")
 ```
 
-```{r chunk_glmm}
-fit.ri = lme(fixed = n_wbv ~ visit+base_mmse+sex+educ+ses, random=reStruct(~ 1 | id), data=az, method="ML")
+```{r chunk_glmm, warning=FALSE}
+fit.ri = lme(fixed = n_wbv ~ visit+base_mmse+visit*base_mmse+sex+educ+ses, random=reStruct(~ 1 | id), data=az, method="ML")
 summary(fit.ri)
+# fixed effect
+fixed = data.frame(
+  Est = c(summary(fit.ri)$coefficients$fixed),
+  SE = c(sqrt(diag(summary(fit.ri)$varFix)))
+)
+rownames(fixed) = c("Intercept, b0",
+                    "Main effect for visit", "Main effect for baseline MMSE",
+                    "Main effect for sexM:sexF", "Main effect for education",
+                    "Main effect for social economic status",
+                    "Interaction for visit, baseline MMSE")
+# random effect
+random = data.frame( ran.fit1 = c(as.numeric(VarCorr(summary(fit.ri))[1,2]), summary(fit.ri)$sigma))
+rownames(random) = c("SD of random intercepts", "SD of errors")
+colnames(random) = c("fit1", "fit2")
 ```
+
+```{r chunk_varying coefficient}
+# assume slope for visit depends on the value of baseline mmse
+
+```
+
+```{r}
+p.s
+s2 = data.frame(sum_2_stage)[, -3]
+knitr::kable(sum_2_stage, format = "markdown")
+knitr::kable(comat, format = "markdown")
+
+```
+
+
 
 
 

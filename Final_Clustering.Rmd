@@ -1,0 +1,89 @@
+---
+title: "Final_Clustering"
+author: "Zirui Zhang"
+date: "2023-12-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(VGAM)
+library(MASS)
+library(caret)
+library(splines)
+library(boot)
+library(VGAM)
+library(plotrix)
+```
+
+```{r chunk_data import}
+data_c = data.frame(read_excel("./MRI.xlsx", sheet = "Sheet2")) |> 
+  janitor::clean_names() |> 
+  rename("id" = "subject_id",
+         "sex" = "m_f",
+         "dementia" = "group") |> 
+  dplyr::select(-mri_id, -mr_delay, -hand, -cdr, -asf, -e_tiv, -visit, -n_wbv, -id) |> 
+  mutate(dementia = factor(ifelse(dementia == "Demented", 1, 0)),
+         sex = ifelse(sex == "M", 0, 1)) |> 
+  filter(!is.na(mmse))
+median_ses = median(data_c$ses, na.rm = TRUE) # impute missing as median in ses
+data_c$ses = ifelse(is.na(data_c$ses), median_ses, data_c$ses)
+```
+
+```{r}
+set.seed(200427)
+data_cr= data_c[sample(nrow(data_c)), ]
+train = data_cr[1:200, ]
+test = data_cr[201:371, ]
+```
+
+```{r chunk_logistic}
+# fit model
+fit = vglm(dementia~., family=multinomial, data=train)
+# make predictions
+probabilities = predict(fit, test[,2:6], type="response")
+print(dim(probabilities))
+predictions = apply(probabilities, 1, which.max)
+predictions[which(predictions=="1")] = levels(test$dementia)[1]
+predictions[which(predictions=="2")] = levels(test$dementia)[2]
+# summarize accuracy
+table(predictions, test$dementia)
+# test error
+probabilities_test = predict(fit, test[,2:6], type="response")
+predictions_test = apply(probabilities_test, 1, which.max)
+predictions_test[which(predictions_test==1)] = levels(test$dementia)[1]
+predictions_test[which(predictions_test==2)] = levels(test$dementia)[2]
+predictions_test = as.factor(predictions_test)
+test_error = mean(predictions_test != test$dementia)
+std.1 = std.error(predictions_test != test$dementia)
+```
+
+```{r chunk_LDA}
+fit2 = lda(dementia~., data=train)
+predictions2 = predict(fit2, test[, 2:6])$class
+table(predictions2, test$dementia)
+test_error2 = mean(predictions2 != test$dementia)
+std.2 = std.error(predictions2 != test$dementia)
+```
+
+```{r chunk_QDA}
+fit3 = qda(dementia~., data=train)
+predictions3 = predict(fit3, test[, 2:6])
+table(predictions3$class, test$dementia)
+test_error3 = mean(predictions3$class != test$dementia)
+std.3 = std.error(predictions3$class != test$dementia)
+```
+
+```{r chunk_clustersum}
+sum_p4 = data.frame(
+  a = c(test_error, test_error2, test_error3),
+  b = c(std.1, std.2, std.3)
+)
+rownames(sum_p4) = c("Logistic Regression", "LDA", "QDA")
+colnames(sum_p4) = c("test error", "standard error")
+print(sum_p4)
+```
+
+
+
+
